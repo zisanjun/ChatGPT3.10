@@ -174,6 +174,8 @@ pnpm dev
 - `TIMEOUT_MS` timeout, in milliseconds, optional
 - `SOCKS_PROXY_HOST` optional, effective with SOCKS_PROXY_PORT
 - `SOCKS_PROXY_PORT` optional, effective with SOCKS_PROXY_HOST
+- `HTTPS_PROXY` optional, support http，https, socks5
+- `ALL_PROXY` optional, support http，https, socks5
 
 ![docker](./docs/docker.png)
 
@@ -183,10 +185,10 @@ pnpm dev
 docker build -t chatgpt-web .
 
 # foreground operation
-docker run --name chatgpt-web --rm -it -p 3002:3002 --env OPENAI_API_KEY=your_api_key chatgpt-web
+docker run --name chatgpt-web --rm -it -p 127.0.0.1:3002:3002 --env OPENAI_API_KEY=your_api_key chatgpt-web
 
 # background operation
-docker run --name chatgpt-web -d -p 3002:3002 --env OPENAI_API_KEY=your_api_key chatgpt-web
+docker run --name chatgpt-web -d -p 127.0.0.1:3002:3002 --env OPENAI_API_KEY=your_api_key chatgpt-web
 
 # running address
 http://localhost:3002/
@@ -203,7 +205,7 @@ services:
   app:
     image: chenzhaoyu94/chatgpt-web # always use latest, pull the tag image again when updating
     ports:
-      - 3002:3002
+      - 127.0.0.1:3002:3002
     environment:
       # one of two
       OPENAI_API_KEY: xxxxxx
@@ -223,6 +225,8 @@ services:
       SOCKS_PROXY_HOST: xxxx
       # socks proxy port, optional, effective with SOCKS_PROXY_HOST
       SOCKS_PROXY_PORT: xxxx
+      # HTTPS Proxy，optional, support http, https, socks5
+      HTTPS_PROXY: http://xxx:7890
 ```
 The `OPENAI_API_BASE_URL` is optional and only used when setting the `OPENAI_API_KEY`.
 The `OPENAI_API_MODEL` is optional and only used when setting the `OPENAI_API_KEY`.
@@ -245,6 +249,8 @@ The `OPENAI_API_MODEL` is optional and only used when setting the `OPENAI_API_KE
 | `API_REVERSE_PROXY`  | Optional, only for `Web API` | Reverse proxy address for `Web API`. [Details](https://github.com/transitive-bullshit/chatgpt-api#reverse-proxy) |
 | `SOCKS_PROXY_HOST`   | Optional, effective with `SOCKS_PROXY_PORT` | Socks proxy.                      |
 | `SOCKS_PROXY_PORT`   | Optional, effective with `SOCKS_PROXY_HOST` | Socks proxy port.                 |
+| `HTTPS_PROXY`   | Optional | HTTPS Proxy.                 |
+| `ALL_PROXY`   | Optional | ALL Proxy.                 |
 
 > Note: Changing environment variables in Railway will cause re-deployment.
 
@@ -271,7 +277,7 @@ PS: You can also run `pnpm start` directly on the server without packaging.
 
 #### Frontend webpage
 
-1. Refer to the root directory `.env.example` file content to create `.env` file, modify `VITE_APP_API_BASE_URL` in `.env` at the root directory to your actual backend interface address.
+1. Refer to the root directory `.env.example` file content to create `.env` file, modify `VITE_GLOB_API_URL` in `.env` at the root directory to your actual backend interface address.
 2. Run the following command in the root directory and then copy the files in the `dist` folder to the root directory of your website service.
 
 [Reference information](https://cn.vitejs.dev/guide/static-deploy.html#building-the-app)
