@@ -1,7 +1,9 @@
 <script setup lang='ts'>
+import type { Ref } from 'vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { NButton, NInput, useDialog, useMessage } from 'naive-ui'
+import { storeToRefs } from 'pinia'
+import { NAutoComplete, NButton, NInput, useDialog, useMessage } from 'naive-ui'
 import html2canvas from 'html2canvas'
 import { Message } from './components'
 import { useScroll } from './hooks/useScroll'
@@ -11,7 +13,7 @@ import { useUsingContext } from './hooks/useUsingContext'
 import HeaderComponent from './components/Header/index.vue'
 import { HoverButton, SvgIcon } from '@/components/common'
 import { useBasicLayout } from '@/hooks/useBasicLayout'
-import { useChatStore } from '@/store'
+import { useChatStore, usePromptStore } from '@/store'
 import { fetchChatAPIProcess } from '@/api'
 import { t } from '@/locales'
 
@@ -29,7 +31,7 @@ useCopyCode()
 
 const { isMobile } = useBasicLayout()
 const { addChat, updateChat, updateChatSome, getChatByUuidAndIndex } = useChat()
-const { scrollRef, scrollToBottom } = useScroll()
+const { scrollRef, scrollToBottom, scrollToBottomIfAtBottom } = useScroll()
 const { usingContext, toggleUsingContext } = useUsingContext()
 
 const { uuid } = route.params as { uuid: string }
@@ -39,6 +41,19 @@ const conversationList = computed(() => dataSources.value.filter(item => (!item.
 
 const prompt = ref<string>('')
 const loading = ref<boolean>(false)
+const inputRef = ref<Ref | null>(null)
+
+// 添加PromptStore
+const promptStore = usePromptStore()
+
+// 使用storeToRefs，保证store修改后，联想部分能够重新渲染
+const { promptList: promptTemplate } = storeToRefs<any>(promptStore)
+
+// 未知原因刷新页面，loading 状态不会重置，手动重置
+dataSources.value.forEach((item, index) => {
+  if (item.loading)
+    updateChatSome(+uuid, index, { loading: false })
+})
 
 function handleSubmit() {
   onConversation()
@@ -102,7 +117,7 @@ async function onConversation() {
           const xhr = event.target
           const { responseText } = xhr
           // Always process the final line
-          const lastIndex = responseText.lastIndexOf('\n')
+          const lastIndex = responseText.lastIndexOf('\n', responseText.length - 2)
           let chunk = responseText
           if (lastIndex !== -1)
             chunk = responseText.substring(lastIndex)
@@ -129,7 +144,7 @@ async function onConversation() {
               return fetchChatAPIOnce()
             }
 
-            scrollToBottom()
+            scrollToBottomIfAtBottom()
           }
           catch (error) {
           //
@@ -151,7 +166,7 @@ async function onConversation() {
           loading: false,
         },
       )
-      scrollToBottom()
+      scrollToBottomIfAtBottom()
       return
     }
 
@@ -183,7 +198,7 @@ async function onConversation() {
         requestOptions: { prompt: message, options: { ...options } },
       },
     )
-    scrollToBottom()
+    scrollToBottomIfAtBottom()
   }
   finally {
     loading.value = false
@@ -232,7 +247,7 @@ async function onRegenerate(index: number) {
           const xhr = event.target
           const { responseText } = xhr
           // Always process the final line
-          const lastIndex = responseText.lastIndexOf('\n')
+          const lastIndex = responseText.lastIndexOf('\n', responseText.length - 2)
           let chunk = responseText
           if (lastIndex !== -1)
             chunk = responseText.substring(lastIndex)
@@ -394,6 +409,32 @@ function handleStop() {
   }
 }
 
+// 可优化部分
+// 搜索选项计算，这里使用value作为索引项，所以当出现重复value时渲染异常(多项同时出现选中效果)
+// 理想状态下其实应该是key作为索引项,但官方的renderOption会出现问题，所以就需要value反renderLabel实现
+const searchOptions = computed(() => {
+  if (prompt.value.startsWith('/')) {
+    return promptTemplate.value.filter((item: { key: string }) => item.key.toLowerCase().includes(prompt.value.substring(1).toLowerCase())).map((obj: { value: any }) => {
+      return {
+        label: obj.value,
+        value: obj.value,
+      }
+    })
+  }
+  else {
+    return []
+  }
+})
+
+// value反渲染key
+const renderOption = (option: { label: string }) => {
+  for (const i of promptTemplate.value) {
+    if (i.value === option.label)
+      return [i.key]
+  }
+  return []
+}
+
 const placeholder = computed(() => {
   if (isMobile.value)
     return t('chat.placeholderMobile')
@@ -413,6 +454,8 @@ const footerClass = computed(() => {
 
 onMounted(() => {
   scrollToBottom()
+  if (inputRef.value)
+    inputRef.value?.focus()
 })
 
 onUnmounted(() => {
@@ -490,13 +533,21 @@ onUnmounted(() => {
               <SvgIcon icon="ri:chat-history-line" />
             </span>
           </HoverButton>
-          <NInput
-            v-model:value="prompt"
-            type="textarea"
-            :autosize="{ minRows: 1, maxRows: 2 }"
-            :placeholder="placeholder"
-            @keypress="handleEnter"
-          />
+          <NAutoComplete v-model:value="prompt" :options="searchOptions" :render-label="renderOption">
+            <template #default="{ handleInput, handleBlur, handleFocus }">
+              <NInput
+                ref="inputRef"
+                v-model:value="prompt"
+                type="textarea"
+                :placeholder="placeholder"
+                :autosize="{ minRows: 1, maxRows: isMobile ? 4 : 8 }"
+                @input="handleInput"
+                @focus="handleFocus"
+                @blur="handleBlur"
+                @keypress="handleEnter"
+              />
+            </template>
+          </NAutoComplete>
           <NButton type="primary" :disabled="buttonDisabled" @click="handleSubmit">
             <template #icon>
               <span class="dark:text-black">
